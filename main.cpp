@@ -235,6 +235,7 @@ public:
     bool show_percent;
     bool multi_thread;
     int max_threads;
+    int image_index;
 
     RayTrace() : size(1000),
                  camera_pos(Vector3(-0.02, 0.09, -2.091)),
@@ -251,17 +252,19 @@ public:
                  rotation(0.0),
                  show_percent(true),
                  multi_thread(true),
-                 max_threads(200)
+                 max_threads(200),
+                 image_index(0)
     {Init();}
 
-    RayTrace(int size, Vector3 camera_pos, vector<Sphere> spheres, vector<PointLight> point_lights, double rotation, bool show_percent, bool multi_thread, int max_threads) : size(size),
+    RayTrace(int size, Vector3 camera_pos, vector<Sphere> spheres, vector<PointLight> point_lights, double rotation, bool show_percent, bool multi_thread, int max_threads, int image_index) : size(size),
                                                                                                                                                              camera_pos(camera_pos),
                                                                                                                                                              spheres(spheres),
                                                                                                                                                              point_lights(point_lights),
                                                                                                                                                              rotation(rotation),
                                                                                                                                                              show_percent(show_percent),
                                                                                                                                                              multi_thread(multi_thread),
-                                                                                                                                                             max_threads(max_threads)
+                                                                                                                                                             max_threads(max_threads),
+                                                                                                                                                             image_index(image_index)
     {Init();}
 
     void save_bitmap(string filename)
@@ -398,6 +401,7 @@ public:
     }
 
     Color point_light(Vector3 normal, Vector3 ray_origin, Vector3 light_pos, double intensity, Color color) {
+        light_pos = rotate_y(light_pos, rotation);
         Vector3 dir = light_pos - ray_origin;
         double dir_len = dir.magnitude();
         Vector3 light_vector = (light_pos - ray_origin).normalize();
@@ -510,17 +514,17 @@ public:
                 }
             }
         }
-        save_bitmap("..\\out.bmp");
+        save_bitmap("..//out_" + to_string(image_index) + ".bmp");
         delete[] imageData;
     }
 };
 
 int main() {
     bool multi_thread = true;
-    bool show_percent = true;
+    bool show_percent = false;
 
     int maxthreads = 200;
-    const int size = 5000;
+    const int size = 1000;
 
     int width = size;
     int height = size;
@@ -540,9 +544,11 @@ int main() {
         { Vector3(-0.1, 3.8, -3.5), 5.2, Color(1.0, 1.0, 1.0) }
     };
 
-    double rotation = -7.1;
-
-    RayTrace rayTrace = RayTrace(size, camera_pos, spheres, point_lights, rotation, show_percent, multi_thread, maxthreads);
-    rayTrace.Generate();
+    for (int i = 0; i < 360; i++) {
+        double rotation = i;
+        RayTrace rayTrace = RayTrace(size, camera_pos, spheres, point_lights, rotation, show_percent, multi_thread, maxthreads, i);
+        rayTrace.Generate();
+        cout << i + 1 << "/" << 360 << " (" << (double) floor(((double) (i + 1) / 360.0) * 1000.0) / 10.0 << "%)" << endl;
+    }
     return 0;
 }
