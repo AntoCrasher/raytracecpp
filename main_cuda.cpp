@@ -9,9 +9,12 @@
 #include <device_launch_parameters.h>
 #include <math_functions.h>
 
-using namespace std;
+#define EPSILON 0.00001f
+#define EPSILON_RAY 0.0001f
+#define IS_ZERO(val) val > -EPSILON && val < EPSILON
+#define M_PI 3.14159265359f
 
-const float M_PI = 3.14159265359f;
+using namespace std;
 
 class Vector2Int {
 public:
@@ -21,6 +24,7 @@ public:
     Vector2Int() : x(0), y(0) {}
     Vector2Int(int x, int y) : x(x), y(y) {}
 };
+
 class Vector3 {
 public:
     float x;
@@ -76,6 +80,7 @@ public:
         return Vector3(x, y, z);
     }
 };
+
 class Color {
 public:
     float red;
@@ -109,6 +114,7 @@ public:
         return Color(red, green, blue);
     }
 };
+
 class ColorInt {
 public:
     int red;
@@ -117,7 +123,7 @@ public:
 
     __host__ __device__ ColorInt() : red(0), green(0), blue(0) {}
     __host__ __device__ ColorInt(int red, int green, int blue) : red(red), green(green), blue(blue) {}
-    __host__ __device__ ColorInt(Color other) : red((int) floor(other.red * 255.0f)), green((int) floor(other.green * 255.0f)), blue((int) floor(other.blue * 255.0f)) {}
+    __host__ __device__ ColorInt(Color other) : red((int)floor(other.red * 255.0f)), green((int)floor(other.green * 255.0f)), blue((int)floor(other.blue * 255.0f)) {}
 
     __host__ __device__ ColorInt operator+(const ColorInt& other) const {
         return ColorInt(red + other.red, green + other.green, blue + other.blue);
@@ -128,17 +134,18 @@ public:
     }
 
     __host__ __device__ ColorInt operator*(float scalar) const {
-        return ColorInt((int) floor(red * scalar), (int) floor(green * scalar), (int) floor(blue * scalar));
+        return ColorInt((int)floor(red * scalar), (int)floor(green * scalar), (int)floor(blue * scalar));
     }
 
     __host__ __device__ ColorInt operator/(float scalar) const {
-        return ColorInt((int) floor(red / scalar), (int) floor(green / scalar), (int) floor(blue / scalar));
+        return ColorInt((int)floor(red / scalar), (int)floor(green / scalar), (int)floor(blue / scalar));
     }
 
     __host__ __device__ ColorInt copy() const {
         return ColorInt(red, green, blue);
     }
 };
+
 class Matrix3 {
 public:
     float matrix[3][3];
@@ -180,6 +187,7 @@ struct PointLight {
     float intensity;
     Color color;
 };
+
 struct Triangle {
     Vector3 point_A;
     Vector3 point_B;
@@ -187,15 +195,18 @@ struct Triangle {
     Color color;
     float reflectivity;
 };
+
 struct Ray {
     Vector3 origin;
     Vector3 direction;
     float t;
 };
+
 struct Plane {
     Vector3 center;
     Vector3 normal;
 };
+
 struct RayTraceRet {
     float dist;
     Vector3 hit_point;
@@ -203,6 +214,7 @@ struct RayTraceRet {
     Color color;
     float reflectivity;
 };
+
 struct ReflectionBounceRet {
     Color shaded;
     Vector3 reflected;
@@ -225,6 +237,7 @@ vector<string> split_string(const string& str, const string& delimiter) {
     tokens.push_back(str.substr(start));
     return tokens;
 }
+
 vector<Triangle> obj_to_triangles(const string& path) {
     ifstream file(path);
     if (!file.is_open()) {
@@ -267,11 +280,24 @@ vector<Triangle> obj_to_triangles(const string& path) {
             vertices[b],
             vertices[c],
             Color(1.0f, 1.0f, 1.0f),
-            0.4f
+            0.5f
             });
     }
 
     return triangles;
+}
+
+void show_triangles(const vector<Triangle>& triangles) {
+    cout << triangles.size() << endl;
+    for (const Triangle& triangle : triangles) {
+        cout << "Triangle:" << endl;
+        cout << "Point A: (" << triangle.point_A.x << ", " << triangle.point_A.y << ", " << triangle.point_A.z << ")" << endl;
+        cout << "Point B: (" << triangle.point_B.x << ", " << triangle.point_B.y << ", " << triangle.point_B.z << ")" << endl;
+        cout << "Point C: (" << triangle.point_C.x << ", " << triangle.point_C.y << ", " << triangle.point_C.z << ")" << endl;
+        cout << "Color: (" << triangle.color.red << ", " << triangle.color.green << ", " << triangle.color.blue << ")" << endl;
+        cout << "Reflectivity: " << triangle.reflectivity << endl;
+        cout << endl;
+    }
 }
 
 __device__ Vector3 rotateVector(const Vector3& v, const float yaw, const float pitch) {
@@ -292,24 +318,29 @@ __device__ Vector3 rotateVector(const Vector3& v, const float yaw, const float p
 
     return rotatedVector;
 }
+
 __device__ float get_yaw(const Vector3& u, Vector3* v) {
     Vector3 u_norm = u.normalize();
     Vector3 v_norm = v->normalize();
 
     return atan2(v_norm.z, v_norm.x) - atan2(u_norm.z, u_norm.x);
 }
+
 __device__ float get_pitch(const Vector3& u, Vector3* v) {
     Vector3 u_norm = u.normalize();
     Vector3 v_norm = v->normalize();
 
     return asin(v_norm.y) - asin(u_norm.y);
 }
+
 __device__ float mix(const float factor, const float A, const float B) {
     return A + (B - A) * factor;
 }
+
 __device__ Color mix(const float factor, const Color& A, const Color& B) {
     return A + (B - A) * factor;
 }
+
 __device__ ColorInt a(int x, int y, int width, int height) {
     ColorInt ret = ColorInt();
     ret.red = floor(((float)(x + y) / (float)width) * 255.0f);
@@ -317,6 +348,7 @@ __device__ ColorInt a(int x, int y, int width, int height) {
     ret.blue = floor(((float)(x + y) / (float)width) * 255.0f);
     return ret;
 }
+
 __device__ RayTraceRet ray_trace(const Triangle& triangle, Ray ray) {
     RayTraceRet false_ret = { 1000.0f, Vector3(), Vector3(), Color(), 0.0f };
 
@@ -325,22 +357,20 @@ __device__ RayTraceRet ray_trace(const Triangle& triangle, Ray ray) {
     Vector3 tri_flat_normal = tri_edge_1.cross(tri_edge_2).normalize();
 
     Plane tri_plane = {
-            triangle.point_A,
-            tri_flat_normal
+        triangle.point_A,
+        tri_flat_normal
     };
 
     float n_dot_d = tri_plane.normal.dot(ray.direction);
 
-    if (abs(n_dot_d) < 0.000001f) {
+    if (IS_ZERO(n_dot_d))
         return false_ret;
-    }
 
     float n_dot_ps = tri_plane.normal.dot(tri_plane.center - ray.origin);
     ray.t = n_dot_ps / n_dot_d;
 
-    if (ray.t < 0.0) {
+    if (ray.t < 0.0)
         return false_ret;
-    }
 
     Vector3 plane_point = ray.origin + ray.direction * ray.t;
 
@@ -356,15 +386,16 @@ __device__ RayTraceRet ray_trace(const Triangle& triangle, Ray ray) {
     Vector3 b_test_vec = b_to_c_edge.cross(b_to_point);
     Vector3 c_test_vec = c_to_a_edge.cross(c_to_point);
 
-    bool a_test_vec_match = a_test_vec.dot(tri_flat_normal) > -0.000001f;
-    bool b_test_vec_match = b_test_vec.dot(tri_flat_normal) > -0.000001f;
-    bool c_test_vec_match = c_test_vec.dot(tri_flat_normal) > -0.000001f;
+    bool a_test_vec_match = a_test_vec.dot(tri_flat_normal) > -EPSILON;
+    bool b_test_vec_match = b_test_vec.dot(tri_flat_normal) > -EPSILON;
+    bool c_test_vec_match = c_test_vec.dot(tri_flat_normal) > -EPSILON;
 
-    if (a_test_vec_match && b_test_vec_match && c_test_vec_match) {
+    if (a_test_vec_match && b_test_vec_match && c_test_vec_match)
         return { ray.t, plane_point, tri_flat_normal, triangle.color, triangle.reflectivity };
-    }
+
     return false_ret;
 }
+
 __device__ RayTraceRet ray_trace_all(Ray ray, Triangle* triangles, size_t num_triangles) {
     RayTraceRet closest_ret = { 1000.0f, Vector3(), Vector3(), Color(), 0.0f };
     for (size_t i = 0; i < num_triangles; i++) {
@@ -377,8 +408,9 @@ __device__ RayTraceRet ray_trace_all(Ray ray, Triangle* triangles, size_t num_tr
     closest_ret.reflectivity = mix(frenel, 1 - closest_ret.reflectivity, 1.0);
     return closest_ret;
 }
+
 __device__ Color point_light(const Vector3& normal, const Vector3& ray_origin, const Vector3& light_pos, const float intensity, const Color& color, Triangle* triangles, size_t num_triangles) {
-    if (normal.magnitude() < 0.000001f) {
+    if (IS_ZERO(normal.magnitude())) {
         return Color();
     }
     Vector3 dir = light_pos - ray_origin;
@@ -386,11 +418,12 @@ __device__ Color point_light(const Vector3& normal, const Vector3& ray_origin, c
     Vector3 light_vector = dir.normalize();
     float dotted = max(normal.dot(light_vector), 0.0f);
     float shaded_hit_point = dotted / (dir_len * dir_len);
-    RayTraceRet ret_shadow_ray = ray_trace_all({ ray_origin + light_vector * 0.0001f, light_vector }, triangles, num_triangles);
+    RayTraceRet ret_shadow_ray = ray_trace_all({ ray_origin + light_vector * EPSILON_RAY, light_vector }, triangles, num_triangles);
     float mult = ret_shadow_ray.dist > dir_len ? 1.0f : 0.0f;
     Color ret_shading = color * (shaded_hit_point * mult * intensity);
     return ret_shading;
 }
+
 __device__ Color shade_hit_point(const Vector3& normal, const Vector3& hit_point, const Color& color, Triangle* triangles, size_t num_triangles, PointLight* point_lights, size_t num_point_lights) {
     Color shading = Color();
     for (size_t i = 0; i < num_point_lights; i++) {
@@ -399,15 +432,18 @@ __device__ Color shade_hit_point(const Vector3& normal, const Vector3& hit_point
     }
     return shading * color;
 }
+
 __device__ Vector3 reflect(const Vector3& vector, const Vector3& normal) {
     return vector - normal * (vector.dot(normal) * 2.0f);
 }
+
 __device__ ReflectionBounceRet get_reflection_bounce(const Ray& ray, const Vector3& ray_normal, Triangle* triangles, size_t num_triangles, PointLight* point_lights, size_t num_point_lights) {
     Vector3 reflected = reflect(ray.direction, ray_normal);
-    RayTraceRet ray_ret = ray_trace_all({ ray.origin + reflected * 0.0001f * 2.0f, reflected }, triangles, num_triangles);
+    RayTraceRet ray_ret = ray_trace_all({ ray.origin + reflected * EPSILON_RAY * 2.0f, reflected }, triangles, num_triangles);
     Color shaded_ret = shade_hit_point(ray_ret.normal, ray_ret.hit_point, ray_ret.color, triangles, num_triangles, point_lights, num_point_lights);
     return { shaded_ret, reflected, ray_ret.normal, ray_ret.hit_point, ray_ret.reflectivity };
 }
+
 __global__ void trace_pixel(Vector2Int* positions, ColorInt* colors, Triangle* triangles, PointLight* point_lights, Vector3* camera_pos, Vector3* camera_dir, int width, int height, int size, size_t num_triangles, size_t num_point_lights) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid < size) {
@@ -434,8 +470,8 @@ __global__ void trace_pixel(Vector2Int* positions, ColorInt* colors, Triangle* t
 
         Color shaded = shade_hit_point(ret.normal, ret.hit_point, ret.color, triangles, num_triangles, point_lights, num_point_lights);
 
-        ReflectionBounceRet reflected_point_1 = get_reflection_bounce({ ret.hit_point + dir * 0.0001f, dir }, ret.normal, triangles, num_triangles, point_lights, num_point_lights);
-        ReflectionBounceRet reflected_point_2 = get_reflection_bounce({ reflected_point_1.hit_point + reflected_point_1.reflected * 0.0001f, reflected_point_1.reflected }, reflected_point_1.normal, triangles, num_triangles, point_lights, num_point_lights);
+        ReflectionBounceRet reflected_point_1 = get_reflection_bounce({ ret.hit_point + dir * EPSILON_RAY, dir }, ret.normal, triangles, num_triangles, point_lights, num_point_lights);
+        ReflectionBounceRet reflected_point_2 = get_reflection_bounce({ reflected_point_1.hit_point + reflected_point_1.reflected * EPSILON_RAY, reflected_point_1.reflected }, reflected_point_1.normal, triangles, num_triangles, point_lights, num_point_lights);
 
         Color reflective = mix(reflected_point_1.reflectivity, reflected_point_1.shaded, reflected_point_2.shaded);
         Color shaded_reflective = mix(1 - ret.reflectivity, shaded, reflective);
@@ -462,6 +498,7 @@ public:
     bool show_percent;
 
     RayTracer() : name("out"), width(100), height(100), camera_pos(Vector3(0.0f, 0.0f, -4.0f)), camera_dir(Vector3(0.0f, 0.0f, 1.0f)), triangles_v(obj_to_triangles("C:\\Users\\anton\\OneDrive\\Desktop\\obj.obj")), show_percent(false) {}
+
     RayTracer(const string& name, int width, int height, const Vector3& camera_pos, const Vector3& camera_dir, const vector<Triangle>& triangles, const vector<PointLight>& point_lights, bool show_percent) : name(name), width(width), height(height), camera_pos(camera_pos), camera_dir(camera_dir), triangles_v(triangles), point_lights_v(point_lights), show_percent(show_percent) {}
 
     void save_bitmap(const string& filename)
@@ -544,6 +581,7 @@ public:
         // Close the file
         file.close();
     }
+
     void put_pixel(const int x, const int y, const int r, const int g, const int b) {
         int position = (x + y * width) * 3;
         imageData[position] = r;
@@ -572,14 +610,14 @@ public:
         for (size_t i = 0; i < num_point_lights; i++) {
             point_lights[i] = point_lights_v[i];
         }
-        
+
         // DEFINE SIZES
 
-        const long vector2int_size      = size * sizeof(Vector2Int);
-        const long colorint_size        = size * sizeof(ColorInt);
-        const long triangles_size       = num_triangles * sizeof(Triangle);
-        const long point_lights_size    = num_point_lights * sizeof(PointLight);
-        const long vector3_size         = sizeof(Vector3);
+        const long vector2int_size = size * sizeof(Vector2Int);
+        const long colorint_size = size * sizeof(ColorInt);
+        const long triangles_size = num_triangles * sizeof(Triangle);
+        const long point_lights_size = num_point_lights * sizeof(PointLight);
+        const long vector3_size = sizeof(Vector3);
 
         // UPDATE I/O PARAMERTERS
 
@@ -600,21 +638,21 @@ public:
         Vector3* d_camera_pos;
         Vector3* d_camera_dir;
 
-        cudaMalloc((void**)&d_positions,        vector2int_size);
-        cudaMalloc((void**)&d_colors,           colorint_size);
-        cudaMalloc((void**)&d_triangles,        triangles_size);
-        cudaMalloc((void**)&d_point_lights,     point_lights_size);
-        cudaMalloc((void**)&d_camera_pos,       vector3_size);
-        cudaMalloc((void**)&d_camera_dir,       vector3_size);
+        cudaMalloc((void**)&d_positions, vector2int_size);
+        cudaMalloc((void**)&d_colors, colorint_size);
+        cudaMalloc((void**)&d_triangles, triangles_size);
+        cudaMalloc((void**)&d_point_lights, point_lights_size);
+        cudaMalloc((void**)&d_camera_pos, vector3_size);
+        cudaMalloc((void**)&d_camera_dir, vector3_size);
 
         // MEMORY COPY PARAMETERS
 
-        cudaMemcpy(d_positions,     positions,      vector2int_size,        cudaMemcpyHostToDevice);
-        cudaMemcpy(d_colors,        colors,         colorint_size,          cudaMemcpyHostToDevice);
-        cudaMemcpy(d_triangles,     triangles,      triangles_size,         cudaMemcpyHostToDevice);
-        cudaMemcpy(d_point_lights,  point_lights,   point_lights_size,      cudaMemcpyHostToDevice);
-        cudaMemcpy(d_camera_pos,    &camera_pos,    vector3_size,           cudaMemcpyHostToDevice);
-        cudaMemcpy(d_camera_dir,    &camera_dir,    vector3_size,           cudaMemcpyHostToDevice);
+        cudaMemcpy(d_positions, positions, vector2int_size, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_colors, colors, colorint_size, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_triangles, triangles, triangles_size, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_point_lights, point_lights, point_lights_size, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_camera_pos, &camera_pos, vector3_size, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_camera_dir, &camera_dir, vector3_size, cudaMemcpyHostToDevice);
 
         // RUN
 
@@ -655,24 +693,11 @@ public:
     }
 };
 
-void show_triangles(const vector<Triangle>& triangles) {
-    cout << triangles.size() << endl;
-    for (const Triangle& triangle : triangles) {
-        cout << "Triangle:" << endl;
-        cout << "Point A: (" << triangle.point_A.x << ", " << triangle.point_A.y << ", " << triangle.point_A.z << ")" << endl;
-        cout << "Point B: (" << triangle.point_B.x << ", " << triangle.point_B.y << ", " << triangle.point_B.z << ")" << endl;
-        cout << "Point C: (" << triangle.point_C.x << ", " << triangle.point_C.y << ", " << triangle.point_C.z << ")" << endl;
-        cout << "Color: (" << triangle.color.red << ", " << triangle.color.green << ", " << triangle.color.blue << ")" << endl;
-        cout << "Reflectivity: " << triangle.reflectivity << endl;
-        cout << endl;
-    }
-}
-
 int main() {
     const float light_radius = 3.0f;
     const float camera_radius = 5.0f;
     const float light_intensity = 5.0f;
-    
+
     vector<PointLight> point_lights = {};
     const vector<Triangle> triangles = obj_to_triangles("C:\\Users\\anton\\OneDrive\\Desktop\\obj.obj");
     const vector<Color> cols = {
