@@ -481,7 +481,7 @@ __global__ void trace_pixel(Vector2Int* positions, ColorInt* colors, Triangle* t
         ColorInt reflectivity_color = ColorInt(floor(ret.reflectivity * 255.0f), floor(ret.reflectivity * 255.0f), floor(ret.reflectivity * 255.0f));
         ColorInt shaded_reflective_color = ColorInt(floor(shaded_reflective.red * 255.0f), floor(shaded_reflective.green * 255.0f), floor(shaded_reflective.blue * 255.0f));
 
-        colors[tid] = shaded_reflective_color;
+        colors[tid] = normal_color;
     }
 }
 
@@ -673,7 +673,7 @@ public:
             put_pixel(x, height - y - 1, color.red, color.green, color.blue);
         }
 
-        save_bitmap("./" + name + ".bmp");
+        save_bitmap("./output/" + name + ".bmp");
 
         // FREE MEMORY
 
